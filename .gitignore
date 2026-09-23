@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+
+# Native iOS sources are maintained separately from the Pages site.
+Flipfeed/
+Flipfeed.xcodeproj/
+
+# Local editor state
+.vscode/
+.idea/

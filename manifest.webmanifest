@@ -1,0 +1,1 @@
+{"name":"Flipfeed","short_name":"Flipfeed","description":"A private, swipe-first flashcard study app.","start_url":"./","scope":"./","display":"standalone","background_color":"#101713","theme_color":"#101713","icons":[{"src":"./icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

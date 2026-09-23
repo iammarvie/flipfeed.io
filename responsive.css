@@ -1,0 +1,2 @@
+body{overflow-x:hidden}.welcome-inner{width:min(100%,530px)}
+@media(max-width:640px){.welcome{width:100%;min-width:0}.welcome-inner{width:calc(100vw - 28px);max-width:100%;min-width:0}.welcome h1{font-size:30px;overflow-wrap:anywhere}.welcome p{overflow-wrap:anywhere}.welcome-actions{display:grid}.welcome-actions button{width:100%}.deck-card-footer{flex-wrap:wrap}.deck-card-footer small{flex:1 0 100%}}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101713">
+  <meta name="description" content="A private, swipe-first flashcard study app.">
+  <title>Flipfeed</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./responsive.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <button id="brand-button" class="brand plain-button" type="button" aria-label="Open library"><span class="brand-mark" aria-hidden="true">F</span><span>Flipfeed</span></button>
+      <nav class="top-actions" aria-label="Main navigation">
+        <button class="icon-button" id="history-button" type="button" title="Study history" aria-label="Study history">▥</button>
+        <button class="icon-button" id="add-button" type="button" title="Create a deck" aria-label="Create a deck">＋</button>
+        <button class="icon-button" id="more-button" type="button" title="Import and backup" aria-label="Import and backup">•••</button>
+      </nav>
+    </header>
+    <main id="main" class="main"></main>
+    <input id="apkg-input" type="file" accept=".apkg" hidden>
+    <input id="backup-input" type="file" accept=".json,application/json" hidden>
+    <dialog id="action-dialog" class="dialog compact-dialog">
+      <div class="dialog-head"><h2>Library tools</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
+      <div class="action-list">
+        <button id="import-action" type="button"><span>⇩</span><div><strong>Import Anki deck</strong><small>Choose an .apkg file</small></div></button>
+        <button id="export-action" type="button"><span>↗</span><div><strong>Export backup</strong><small>Decks, schedules, and history</small></div></button>
+        <button id="restore-action" type="button"><span>↙</span><div><strong>Restore backup</strong><small>Import a Flipfeed JSON file</small></div></button>
+      </div>
+    </dialog>
+    <dialog id="editor-dialog" class="dialog editor-dialog">
+      <form id="deck-form">
+        <div class="dialog-head"><h2 id="editor-title">Create deck</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
+        <label class="field"><span>Deck name</span><input id="deck-title-input" required maxlength="120" placeholder="e.g. Biology midterm"></label>
+        <div class="section-line"><strong>Cards</strong><button id="add-card-row" class="text-button" type="button">＋ Add card</button></div>
+        <div id="card-rows" class="card-rows"></div>
+        <div class="dialog-footer"><button class="secondary-button close-dialog" type="button">Cancel</button><button class="primary-button" type="submit">Save deck</button></div>
+      </form>
+    </dialog>
+    <dialog id="settings-dialog" class="dialog compact-dialog">
+      <form id="settings-form">
+        <div class="dialog-head"><h2>Deck settings</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
+        <label class="field"><span>Desired retention <output id="retention-output">90%</output></span><input id="retention-input" type="range" min="80" max="97" value="90"></label>
+        <label class="field"><span>New cards per day</span><input id="new-limit-input" type="number" min="1" max="1000" value="20"></label>
+        <label class="field"><span>Reviews per day</span><input id="review-limit-input" type="number" min="1" max="5000" value="200"></label>
+        <div class="dialog-footer"><button class="secondary-button close-dialog" type="button">Cancel</button><button class="primary-button" type="submit">Save settings</button></div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script src="./vendor/jszip.min.js"></script>
+  <script src="./vendor/sql-wasm.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
