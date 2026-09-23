@@ -8,3 +8,5 @@ Flipfeed.xcodeproj/
 # Local editor state
 .vscode/
 .idea/
+.firebase/
+firebase-debug.log

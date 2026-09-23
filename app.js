@@ -5,7 +5,7 @@ const DB_NAME = "flipfeed";
 const DB_VERSION = 1;
 const DAY = 86400000;
 const defaults = { retention: 0.9, newLimit: 20, reviewLimit: 200 };
-const state = { decks: [], view: "library", deckId: null, queue: [], position: 0, revealed: false, sessionReviewed: 0, touchY: null, editingId: null };
+const state = { decks: [], view: "library", deckId: null, queue: [], position: 0, revealed: false, sessionReviewed: 0, touchY: null, editingId: null, cloudUser: null, syncing: false };
 
 const uid = () => crypto.randomUUID();
 const escapeHTML = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -30,22 +30,63 @@ function transaction(mode, callback) {
     tx.onerror = () => reject(tx.error);
   });
 }
-async function loadDecks() {
-  state.decks = await new Promise((resolve, reject) => {
+async function loadDecks(ownerId = null) {
+  const allDecks = await new Promise((resolve, reject) => {
     const request = database.transaction("decks").objectStore("decks").getAll();
-    request.onsuccess = () => resolve(request.result.sort((a,b) => a.createdAt.localeCompare(b.createdAt)));
+    request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+  state.decks = allDecks.filter(deck => ownerId ? (!deck.ownerId || deck.ownerId === ownerId) : !deck.ownerId)
+    .sort((a,b) => a.createdAt.localeCompare(b.createdAt));
 }
-async function saveDeck(deck) {
-  deck.updatedAt = new Date().toISOString();
+async function saveDeck(deck, delta = null, syncCloud = true) {
+  if (syncCloud || delta) deck.updatedAt = new Date().toISOString();
   await transaction("readwrite", store => store.put(deck));
   const i = state.decks.findIndex(item => item.id === deck.id);
   if (i < 0) state.decks.push(deck); else state.decks[i] = deck;
+  if (syncCloud && state.cloudUser && window.flipfeedCloud) {
+    try { await window.flipfeedCloud.saveDeck(deck, delta); setSyncMessage("Synced just now"); }
+    catch (error) { console.error(error); setSyncMessage("Saved locally · sync pending"); }
+  }
 }
 async function removeDeck(id) {
   await transaction("readwrite", store => store.delete(id));
   state.decks = state.decks.filter(deck => deck.id !== id);
+  if (state.cloudUser && window.flipfeedCloud) {
+    try { await window.flipfeedCloud.deleteDeck(id); } catch (error) { console.error(error); toast("Deleted locally; cloud deletion is pending"); }
+  }
+}
+
+function setSyncMessage(message) {
+  if ($("sync-message")) $("sync-message").textContent = message;
+}
+async function syncWithCloud() {
+  if (!state.cloudUser || !window.flipfeedCloud || state.syncing) return;
+  state.syncing = true; setSyncMessage("Syncing…");
+  try {
+    const cloudDecks = await window.flipfeedCloud.loadDecks();
+    for (const local of state.decks.filter(deck => !deck.ownerId)) {
+      local.ownerId = state.cloudUser.uid;
+      await saveDeck(local, null, false);
+    }
+    const localById = new Map(state.decks.map(deck => [deck.id, deck]));
+    const cloudById = new Map(cloudDecks.map(deck => [deck.id, deck]));
+    for (const local of state.decks) {
+      const cloud = cloudById.get(local.id);
+      if (!cloud || local.updatedAt > cloud.updatedAt) await window.flipfeedCloud.saveDeck(local);
+    }
+    for (const cloud of cloudDecks) {
+      const local = localById.get(cloud.id);
+      if (!local || cloud.updatedAt > local.updatedAt) {
+        cloud.media = local?.media || {};
+        await saveDeck(cloud, null, false);
+      }
+    }
+    setSyncMessage(`Synced ${new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`);
+    if (state.view === "library") renderLibrary();
+  } catch (error) {
+    console.error(error); setSyncMessage("Offline · changes stay on this device"); toast("Cloud sync is unavailable; local study still works");
+  } finally { state.syncing = false; }
 }
 
 function toast(message) {
@@ -115,7 +156,7 @@ function rateCard(card, rating) {
   }
   state.position++;
   state.revealed = false;
-  saveDeck(deck).then(renderStudy);
+  saveDeck(deck, { card, review: deck.reviews.at(-1) }).then(renderStudy);
 }
 
 function sanitizeHTML(html, deck) {
@@ -226,6 +267,24 @@ function openSettings(id) {
   $("retention-input").value = Math.round(settings.retention * 100); $("retention-output").textContent = `${Math.round(settings.retention * 100)}%`;
   $("new-limit-input").value = settings.newLimit; $("review-limit-input").value = settings.reviewLimit; $("settings-dialog").showModal();
 }
+function openAccount() {
+  const signedIn = Boolean(state.cloudUser);
+  $("signed-out-account").hidden = signedIn;
+  $("signed-in-account").hidden = !signedIn;
+  if (signedIn) $("account-name").textContent = state.cloudUser.email;
+  $("account-dialog").showModal();
+}
+function authMessage(error) {
+  const messages = {
+    "auth/email-already-in-use": "An account already uses that email. Sign in instead.",
+    "auth/invalid-credential": "The email or password is incorrect.",
+    "auth/invalid-email": "Enter a valid email address.",
+    "auth/weak-password": "Use a password with at least six characters.",
+    "auth/operation-not-allowed": "Enable Email/Password authentication in Firebase Console first.",
+    "auth/network-request-failed": "You appear to be offline. Try again when connected."
+  };
+  return messages[error.code] || error.message || "Authentication failed.";
+}
 
 function renderTemplate(template, fields, front = "") {
   return template.replace(/{{([#/^][^}]+)}}/g, "").replace(/{{([^}]+)}}/g, (_, raw) => { const key = raw.trim(); if (key === "FrontSide") return front; return fields[key.split(":").at(-1)] || ""; });
@@ -262,7 +321,7 @@ async function importAPKG(file) {
   const media = {}; const mediaFile = zip.file("media");
   if (mediaFile) { const map = JSON.parse(await mediaFile.async("string")); for (const [key,name] of Object.entries(map)) { const entry = zip.file(key); if (entry && !name.includes("/") && !name.includes("\\")) media[name] = bytesToDataURL(await entry.async("uint8array"), name); } }
   const name = decks[String(result.values[0][2])]?.name || file.name.replace(/\.apkg$/i, "");
-  const deck = { id: uid(), name, cards, media, reviews: [], settings: {...defaults}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), syncState: "local" };
+  const deck = { id: uid(), name, cards, media, reviews: [], settings: {...defaults}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ownerId: state.cloudUser?.uid || null, syncState: "local" };
   await saveDeck(deck); renderLibrary(); toast(`${cards.length} cards imported`);
 }
 
@@ -272,10 +331,11 @@ function exportBackup() {
 }
 async function restoreBackup(file) {
   const data = JSON.parse(await file.text()); if (data.format !== "flipfeed-backup" || !Array.isArray(data.decks)) throw new Error("That is not a Flipfeed backup.");
-  for (const deck of data.decks) await saveDeck(deck); renderLibrary(); toast(`${data.decks.length} decks restored`);
+  for (const deck of data.decks) { deck.ownerId = state.cloudUser?.uid || null; await saveDeck(deck); } renderLibrary(); toast(`${data.decks.length} decks restored`);
 }
 
 $("brand-button").onclick = renderLibrary;
+$("account-button").onclick = openAccount;
 $("history-button").onclick = renderHistory;
 $("add-button").onclick = () => openEditor();
 $("more-button").onclick = () => $("action-dialog").showModal();
@@ -285,19 +345,46 @@ $("restore-action").onclick = () => { $("action-dialog").close(); $("backup-inpu
 document.querySelectorAll(".close-dialog").forEach(button => button.onclick = () => button.closest("dialog").close());
 $("add-card-row").onclick = () => addCardRow();
 $("retention-input").oninput = event => $("retention-output").textContent = `${event.target.value}%`;
+$("account-form").onsubmit = async event => {
+  event.preventDefault();
+  try {
+    await window.flipfeedCloud.signIn($("account-email").value.trim(), $("account-password").value);
+    $("account-dialog").close(); toast("Signed in · syncing your library");
+  } catch (error) { toast(authMessage(error)); }
+};
+$("create-account").onclick = async () => {
+  try {
+    await window.flipfeedCloud.createAccount($("account-email").value.trim(), $("account-password").value);
+    $("account-dialog").close(); toast("Account created · syncing your library");
+  } catch (error) { toast(authMessage(error)); }
+};
+$("sign-out").onclick = async () => { await window.flipfeedCloud.signOut(); $("account-dialog").close(); toast("Signed out; local decks remain on this device"); };
+$("sync-now").onclick = syncWithCloud;
 $("deck-form").onsubmit = async event => {
   event.preventDefault(); const rows = [...document.querySelectorAll(".card-row")];
   if (!rows.length) return toast("Add at least one card.");
   const existing = state.decks.find(deck => deck.id === state.editingId);
   const oldCards = Object.fromEntries((existing?.cards || []).map(card => [card.id,card]));
   const cards = rows.map(row => { const id=row.dataset.id; const old=oldCards[id]; return {id,front:escapeHTML(row.querySelector(".front").value).replace(/\n/g,"<br>"),back:escapeHTML(row.querySelector(".back").value).replace(/\n/g,"<br>"),tags:row.querySelector(".tags").value.split(",").map(x=>x.trim()).filter(Boolean),schedule:old?.schedule}; });
-  const deck = existing ? {...existing,name:$("deck-title-input").value.trim(),cards} : {id:uid(),name:$("deck-title-input").value.trim(),cards,media:{},reviews:[],settings:{...defaults},createdAt:new Date().toISOString(),syncState:"local"};
+  const deck = existing ? {...existing,name:$("deck-title-input").value.trim(),cards} : {id:uid(),name:$("deck-title-input").value.trim(),cards,media:{},reviews:[],settings:{...defaults},createdAt:new Date().toISOString(),ownerId:state.cloudUser?.uid || null,syncState:"local"};
   await saveDeck(deck); $("editor-dialog").close(); renderLibrary(); toast(existing ? "Deck updated" : "Deck created");
 };
 $("settings-form").onsubmit = async event => { event.preventDefault(); const deck=selectedDeck(); deck.settings={retention:Number($("retention-input").value)/100,newLimit:Number($("new-limit-input").value),reviewLimit:Number($("review-limit-input").value)}; await saveDeck(deck); $("settings-dialog").close(); renderLibrary(); toast("Settings saved"); };
 $("apkg-input").onchange = async event => { const file=event.target.files[0]; event.target.value=""; if (!file) return; try { await importAPKG(file); } catch(error) { console.error(error); toast(error.message || "Import failed"); } };
 $("backup-input").onchange = async event => { const file=event.target.files[0]; event.target.value=""; if (!file) return; try { await restoreBackup(file); } catch(error) { toast(error.message || "Restore failed"); } };
 document.addEventListener("keydown", event => { if (state.view !== "study" || !selectedDeck()) return; const card=state.queue[state.position]; if (!card) return; if (event.key === " " && !["INPUT","TEXTAREA"].includes(event.target.tagName)) { event.preventDefault(); state.revealed=!state.revealed; renderStudy(); } if (state.revealed && ["1","2","3","4"].includes(event.key)) rateCard(card,Number(event.key)); });
+window.addEventListener("flipfeed-auth", async event => {
+  state.cloudUser = event.detail;
+  $("account-button").classList.toggle("synced", Boolean(state.cloudUser));
+  $("account-button").title = state.cloudUser ? `Signed in as ${state.cloudUser.email}` : "Account and sync";
+  await loadDecks(state.cloudUser?.uid || null);
+  if (state.cloudUser) await syncWithCloud();
+  else if (state.view === "library") renderLibrary();
+});
+window.addEventListener("flipfeed-firebase-ready", () => {
+  $("account-button").disabled = false;
+  $("account-button").title = "Account and sync";
+});
 
 async function boot() {
   database = await openDB(); await loadDecks(); renderLibrary();

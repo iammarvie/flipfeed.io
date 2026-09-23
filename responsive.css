@@ -1,2 +1,4 @@
 body{overflow-x:hidden}.welcome-inner{width:min(100%,530px)}
+.dialog-copy{margin:0;padding:18px 20px 4px;color:var(--muted);font-size:13px;line-height:1.5}.account-state{margin:20px;display:flex;align-items:center;gap:12px;padding:15px;background:#ffffff08;border:1px solid var(--line);border-radius:7px}.account-state strong,.account-state small{display:block}.account-state small{color:var(--muted);margin-top:3px}.sync-dot{width:10px;height:10px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 5px #bbed8b1c}.icon-button.synced{color:var(--lime);border-color:#bbed8b55}
+.icon-button:disabled{opacity:.4;cursor:wait}
 @media(max-width:640px){.welcome{width:100%;min-width:0}.welcome-inner{width:calc(100vw - 28px);max-width:100%;min-width:0}.welcome h1{font-size:30px;overflow-wrap:anywhere}.welcome p{overflow-wrap:anywhere}.welcome-actions{display:grid}.welcome-actions button{width:100%}.deck-card-footer{flex-wrap:wrap}.deck-card-footer small{flex:1 0 100%}}

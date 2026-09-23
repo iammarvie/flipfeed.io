@@ -17,6 +17,7 @@
     <header class="topbar">
       <button id="brand-button" class="brand plain-button" type="button" aria-label="Open library"><span class="brand-mark" aria-hidden="true">F</span><span>Flipfeed</span></button>
       <nav class="top-actions" aria-label="Main navigation">
+        <button class="icon-button" id="account-button" type="button" title="Loading account services" aria-label="Account and sync" disabled>♙</button>
         <button class="icon-button" id="history-button" type="button" title="Study history" aria-label="Study history">▥</button>
         <button class="icon-button" id="add-button" type="button" title="Create a deck" aria-label="Create a deck">＋</button>
         <button class="icon-button" id="more-button" type="button" title="Import and backup" aria-label="Import and backup">•••</button>
@@ -51,10 +52,27 @@
         <div class="dialog-footer"><button class="secondary-button close-dialog" type="button">Cancel</button><button class="primary-button" type="submit">Save settings</button></div>
       </form>
     </dialog>
+    <dialog id="account-dialog" class="dialog compact-dialog">
+      <form id="account-form">
+        <div class="dialog-head"><h2>Account & sync</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div>
+        <div id="signed-out-account">
+          <p class="dialog-copy">Sign in to keep decks and study progress in sync across your devices.</p>
+          <label class="field"><span>Email</span><input id="account-email" type="email" autocomplete="email" required></label>
+          <label class="field"><span>Password</span><input id="account-password" type="password" autocomplete="current-password" minlength="6" required></label>
+          <div class="dialog-footer"><button id="create-account" class="secondary-button" type="button">Create account</button><button class="primary-button" type="submit">Sign in</button></div>
+        </div>
+        <div id="signed-in-account" hidden>
+          <div class="account-state"><span class="sync-dot"></span><div><strong id="account-name"></strong><small id="sync-message">Synced</small></div></div>
+          <p class="dialog-copy">Deck text, schedules, settings, and history sync automatically. Imported images and audio remain on this device.</p>
+          <div class="dialog-footer"><button id="sync-now" class="secondary-button" type="button">Sync now</button><button id="sign-out" class="secondary-button" type="button">Sign out</button></div>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./vendor/sql-wasm.js"></script>
+  <script type="module" src="./firebase-sync.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
